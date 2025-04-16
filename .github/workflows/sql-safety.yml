@@ -20,7 +20,7 @@ jobs:
       with:
         files: '**/*.sql'
 
-    - name: SCan SQL files for DELETE, DROP, TRUNCATE
+    - name: Scan SQL files for DELETE, DROP, TRUNCATE
       run: |
         found=0
         keywords='delete|drop|truncate'
@@ -35,10 +35,10 @@ jobs:
           fi
         done
 
-        if ["$found" -eq 1]; then
+        # Corrected if statement with space between brackets
+        if [ "$found" -eq 1 ]; then
           echo "PR blocked: DELETE, DROP or TRUNCATE statements found."
           exit 1
         else
           echo "All SQL checks passed."
         fi
-  
