@@ -1,0 +1,44 @@
+name: SQL Safety Check
+
+on:
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  check-sql:
+    name: Check for Dangerous SQL in PR
+    runs-on: ubuntu-latest
+
+  steps:
+  - name: Checkout Code
+    uses: actions/checkout@v3
+
+  - name: Get list of changed SQL files
+    id: changed-files
+    uses: tj-actions/changed-files@v44
+    with:
+      files: '**/*.sql'
+
+  - name: SCan SQL files for DELETE, DROP, TRUNCATE
+    run: |
+      found=0
+      keywords='delete|drop|truncate'
+
+      echo "Checking for dangerous SQL statements..."
+
+      for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+        echo "Scanning: $file"
+        if grep -Ei "\b($keywords)\b" "$file"; then
+          echo "Dangerous SQL statement found in $file"
+          found=1
+        fi
+      done
+
+      if ["$found" -eq 1]; then
+        echo "PR blocked: DELETE, DROP or TRUNCATE statements found."
+        exit 1
+      else
+        echo "All SQL checks passed."
+      fi
+  
