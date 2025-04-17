@@ -29,10 +29,41 @@ jobs:
 
         for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
           echo "Scanning: $file"
+
+          # Checks for Delete Drop and Truncate Statements
           if grep -Ei "\b($keywords)\b" "$file"; then
             echo "Dangerous SQL statement found in $file"
             found=1
           fi
+
+          #Check for UPDATE statements without WHERE clause
+          inside_update=o
+          update_statement=""
+          line_number=0
+
+          while IFS= read -r line | [[ -n "$line" ]]; do
+            line_number=$((line_number + 1))
+            trimmed_line=$(echo "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+
+            if [[ "$trimmed_line" == update* ]]; then
+              inside_update=1
+              update_statement="$line"
+              continue
+            fi
+
+            if [[ $inside_update -eq 1 ]]; then
+              update_statement="$update_statement $line"
+              if [[ "$line" =~ ; ]]; then
+                inside_update=0
+                if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
+                  echo "UPDATE statement without WHERE at or near line $line_number in $file"
+                  echo "  -> $update_statement"
+                  found=1
+                fi
+                update_statement=""
+              fi
+            fi
+          done < "$file"  
         done
 
         if ["$found" -eq 1]; then
