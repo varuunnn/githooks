@@ -30,13 +30,11 @@ jobs:
         for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
           echo "Scanning: $file"
 
-          # Checks for Delete Drop and Truncate Statements
           if grep -Ei "\b($keywords)\b" "$file"; then
             echo "Dangerous SQL statement found in $file"
             found=1
           fi
 
-          # Check for UPDATE statements without WHERE clause
           inside_update=o
           update_statement=""
           line_number=0
