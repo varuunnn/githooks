@@ -36,7 +36,7 @@ jobs:
             found=1
           fi
 
-          #Check for UPDATE statements without WHERE clause
+          # Check for UPDATE statements without WHERE clause
           inside_update=o
           update_statement=""
           line_number=0
