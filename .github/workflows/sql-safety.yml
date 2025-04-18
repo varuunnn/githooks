@@ -20,96 +20,70 @@ jobs:
         with:
           files: '**/*.sql'
 
-      - name: Scan SQL files for DELETE, DROP, TRUNCATE, or unsafe UPDATEs
+      - name: Scan SQL files for unsafe statements
         run: |
           found=0
-          keywords='delete|drop|truncate'
-          echo "Checking for dangerous SQL statements..."
+          echo "🔍 Checking SQL files for dangerous statements..."
 
           for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            echo "🔍 Scanning: $file"
-
-            inside_update=0
-            update_statement=""
-            update_start_line=0
+            echo "📂 Scanning: $file"
             line_number=0
+            inside_update=0
+            update_sql=""
+            update_start_line=0
 
             while IFS= read -r line || [[ -n "$line" ]]; do
               line_number=$((line_number + 1))
+              trimmed_line="$(echo "$line" | sed 's/^[ \t]*//' | tr '[:upper:]' '[:lower:]')"
 
-              # Skip empty lines and comments (single-line comments start with '--')
-              trimmed_no_space=$(echo "$line" | sed 's/^[ \t]*//')
-              if [[ "$trimmed_no_space" == --* || -z "$line" ]]; then
-                continue
-              fi
+              # Skip comments and blank lines
+              [[ "$trimmed_line" == --* || -z "$trimmed_line" ]] && continue
 
-              # Check for DELETE, DROP, TRUNCATE statements
-              if echo "$line" | grep -Eiq "\b($keywords)\b"; then
-                echo "⚠️ Dangerous SQL found at $file:$line_number"
-                echo "  -> $line"
+              # Detect dangerous standalone keywords
+              if echo "$trimmed_line" | grep -Eiq '\b(delete|drop|truncate)\b'; then
+                echo "❌ Dangerous SQL keyword found at $file:$line_number"
+                echo "   -> $line"
                 found=1
               fi
 
-              # Normalize line for easier detection (case-insensitive and trim spaces)
-              trimmed_line=$(echo "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-
-              # Start of UPDATE block
-              if [[ "$trimmed_line" == update* ]]; then
-                if [[ $inside_update -eq 1 ]]; then
-                  # If previous UPDATE block didn't have a WHERE clause, report it
-                  if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE before line $line_number in $file"
-                    echo "  -> $update_statement"
-                    found=1
-                  fi
-                fi
+              # Start of UPDATE statement
+              if [[ $inside_update -eq 0 && "$trimmed_line" =~ ^update[[:space:]] ]]; then
                 inside_update=1
+                update_sql="$line"
                 update_start_line=$line_number
-                update_statement="$line"
                 continue
               fi
 
-              # Accumulate multi-line UPDATE
+              # Continue accumulating UPDATE block
               if [[ $inside_update -eq 1 ]]; then
-                update_statement="$update_statement $line"
+                update_sql="$update_sql $line"
 
-                # If a new SQL statement starts (e.g., DELETE, INSERT, UPDATE, etc.)
-                if echo "$line" | grep -Eq '^\s*(update|insert|delete|drop|truncate)'; then
-                  if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE near line $update_start_line in $file"
-                    echo "  -> $update_statement"
+                # If line ends with ; then check the full statement
+                if [[ "$trimmed_line" == *\; ]]; then
+                  if ! echo "$update_sql" | grep -Eiq '\bwhere\b'; then
+                    echo "❌ UPDATE without WHERE at $file:$update_start_line"
+                    echo "   -> $update_sql"
                     found=1
                   fi
-                  update_statement=""
                   inside_update=0
-                  continue
-                fi
-
-                # If semicolon ends the statement
-                if echo "$line" | grep -q ";"; then
-                  if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE near line $update_start_line in $file"
-                    echo "  -> $update_statement"
-                    found=1
-                  fi
-                  update_statement=""
-                  inside_update=0
+                  update_sql=""
+                  update_start_line=0
                 fi
               fi
             done < "$file"
 
-            # If file ends inside UPDATE block (e.g., multi-line UPDATE)
+            # Final check in case file ends without semicolon
             if [[ $inside_update -eq 1 ]]; then
-              if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
-                echo "⚠️ UPDATE without WHERE at line $update_start_line in $file"
-                echo "  -> $update_statement"
+              if ! echo "$update_sql" | grep -Eiq '\bwhere\b'; then
+                echo "❌ UPDATE without WHERE at EOF in $file (starting at line $update_start_line)"
+                echo "   -> $update_sql"
                 found=1
               fi
             fi
           done
 
-          if [ "$found" -eq 1 ]; then
-            echo "❌ SQL safety check failed: dangerous statements found."
+          if [[ $found -eq 1 ]]; then
+            echo "❌ SQL safety check failed!"
             exit 1
           else
             echo "✅ All SQL checks passed."
