@@ -56,6 +56,7 @@ jobs:
               # Start of UPDATE block
               if [[ "$trimmed_line" == update* ]]; then
                 if [[ $inside_update -eq 1 ]]; then
+                  # If previous UPDATE block didn't have a WHERE clause, report it
                   if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
                     echo "⚠️ UPDATE without WHERE before line $line_number in $file"
                     echo "  -> $update_statement"
@@ -97,7 +98,7 @@ jobs:
               fi
             done < "$file"
 
-            # If file ends inside UPDATE block
+            # If file ends inside UPDATE block (e.g., multi-line UPDATE)
             if [[ $inside_update -eq 1 ]]; then
               if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
                 echo "⚠️ UPDATE without WHERE at line $update_start_line in $file"
