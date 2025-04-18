@@ -39,7 +39,8 @@ jobs:
           update_statement=""
           line_number=0
 
-          while IFS= read -r line | [[ -n "$line" ]]; do
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
             line_number=$((line_number + 1))
             trimmed_line=$(echo "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
 
@@ -48,7 +49,7 @@ jobs:
               update_statement="$line"
               continue
             fi
-
+          
             if [[ $inside_update -eq 1 ]]; then
               update_statement="$update_statement $line"
               if [[ "$line" =~ ; ]]; then
