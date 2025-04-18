@@ -22,89 +22,81 @@ jobs:
 
       - name: Scan SQL files for DELETE, DROP, TRUNCATE, or unsafe UPDATEs
         run: |
-          found=0
-          keywords='delete|drop|truncate'
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --no-cache-dir regex
+          python3 -c "
+import re
+import sys
 
-          echo "Checking for dangerous SQL statements..."
+# Keywords to check for dangerous SQL statements
+keywords = r'(?i)\b(delete|drop|truncate)\b'
+update_pattern = r'(?i)^update\s+\w+\s+set'
 
-          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
-            echo "🔍 Scanning: $file"
+# Function to check if an UPDATE statement is unsafe
+def check_update(statement, line_number):
+    # Normalize and remove extra spaces to handle multi-line
+    statement = ' '.join(statement.split())
+    # Check if 'WHERE' is present in the statement
+    if 'where' not in statement.lower():
+        print(f'⚠️ UPDATE without WHERE at line {line_number}')
+        print(f'  -> {statement}')
+        return True
+    return False
 
-            inside_update=0
-            update_statement=""
-            update_start_line=0
-            line_number=0
+def scan_sql_file(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
 
-            while IFS= read -r line || [[ -n "$line" ]]; do
-              line_number=$((line_number + 1))
+    inside_update = False
+    update_statement = []
+    line_number = 0
+    found = False
 
-              # Skip full-line comments
-              trimmed_no_space=$(echo "$line" | sed 's/^[ \t]*//')
-              if [[ "$trimmed_no_space" == --* ]]; then
-                continue
-              fi
+    for line in lines:
+        line_number += 1
+        line = line.strip()
 
-              # Check for DELETE, DROP, TRUNCATE
-              if echo "$line" | grep -Eiq "\b($keywords)\b"; then
-                echo "⚠️ Dangerous SQL found at $file:$line_number"
-                echo "  -> $line"
-                found=1
-              fi
+        # Skip empty lines and comments
+        if not line or line.startswith('--'):
+            continue
 
-              # Normalize line for easier detection
-              trimmed_line=$(echo "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+        # Check for DELETE, DROP, TRUNCATE
+        if re.search(keywords, line):
+            print(f'⚠️ Dangerous SQL found at {file_path}:{line_number}')
+            print(f'  -> {line}')
+            found = True
 
-              # Start of UPDATE block
-              if [[ "$trimmed_line" == update* ]]; then
-                if [[ $inside_update -eq 1 ]]; then
-                  # Trim leading/trailing spaces and normalize case before checking
-                  normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-                  if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE before line $line_number in $file"
-                    echo "  -> $update_statement"
-                    found=1
-                  fi
-                fi
-                inside_update=1
-                update_start_line=$line_number
-                update_statement="$line"
-                continue
-              fi
+        # Check for UPDATE statements
+        if re.match(update_pattern, line, re.IGNORECASE):
+            if inside_update:  # If inside an UPDATE, we should already have accumulated a statement
+                if check_update(update_statement, line_number):
+                    found = True
+            inside_update = True
+            update_statement = [line]
+            continue
 
-              # Accumulate UPDATE statement across multiple lines
-              if [[ $inside_update -eq 1 ]]; then
-                update_statement="$update_statement $line"
+        # Accumulate UPDATE statement across multiple lines
+        if inside_update:
+            update_statement.append(line)
+            if line.endswith(";"):  # End of an UPDATE statement
+                if check_update(update_statement, line_number):
+                    found = True
+                inside_update = False
+                update_statement = []
 
-                # End of statement with semicolon
-                if echo "$line" | grep -q ";"; then
-                  # Normalize the full update statement before checking
-                  normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-                  if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE near line $line_number in $file"
-                    echo "  -> $update_statement"
-                    found=1
-                  fi
-                  update_statement=""
-                  inside_update=0
-                fi
-              fi
-            done < "$file"
+    return found
 
-            # Check if EOF reached during UPDATE
-            if [[ $inside_update -eq 1 ]]; then
-              # Normalize the full update statement before checking
-              normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-              if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
-                echo "⚠️ UPDATE without WHERE at line $update_start_line in $file"
-                echo "  -> $update_statement"
-                found=1
-              fi
-            fi
-          done
+# Iterate over changed files and check for dangerous SQL
+files = sys.argv[1].split()
+found_issues = False
+for file in files:
+    if file.endswith('.sql') and scan_sql_file(file):
+        found_issues = True
 
-          if [ "$found" -eq 1 ]; then
-            echo "❌ SQL safety check failed: dangerous statements found."
-            exit 1
-          else
-            echo "✅ All SQL checks passed."
-          fi
+if found_issues:
+    sys.exit(1)
+else:
+    print('✅ All SQL checks passed.')
+"
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
