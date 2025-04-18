@@ -51,7 +51,7 @@ jobs:
                 found=1
               fi
 
-              # Normalize for UPDATE detection
+              # Normalize line for easier detection
               trimmed_line=$(echo "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
 
               # Start of UPDATE block
@@ -74,24 +74,11 @@ jobs:
               if [[ $inside_update -eq 1 ]]; then
                 update_statement="$update_statement $line"
 
-                # If a new SQL statement starts (e.g., another UPDATE, INSERT, DELETE, etc.)
-                if echo "$line" | grep -Eq '^\s*(update|insert|delete|drop|truncate|create|select)'; then
-                  normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-                  if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE near line $update_start_line in $file"
-                    echo "  -> $update_statement"
-                    found=1
-                  fi
-                  update_statement=""
-                  inside_update=0
-                  continue
-                fi
-
                 # End of statement with semicolon
                 if echo "$line" | grep -q ";"; then
                   normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
                   if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
-                    echo "⚠️ UPDATE without WHERE near line $update_start_line in $file"
+                    echo "⚠️ UPDATE without WHERE near line $line_number in $file"
                     echo "  -> $update_statement"
                     found=1
                   fi
