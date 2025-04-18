@@ -7,8 +7,6 @@ CREATE TABLE feedback (
 
 INSERT INTO products (product_name, price, stock_quantity) VALUES ('Bluetooth Speaker', 49.99, 150);
 
-UPDATE customers SET email = 'newemail@example.com' WHERE customer_id = 42;
-
-DELETE FROM orders WHERE order_date < '2024-01-01';
+UPDATE customers SET email = 'newemail@example.com';
 
 SELECT first_name, last_name FROM employees WHERE department = 'Sales';
