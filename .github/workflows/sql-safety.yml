@@ -51,17 +51,17 @@ jobs:
             fi
           
             if [[ $inside_update -eq 1 ]]; then
-              update_statement="$update_statement $line"
-              if [[ "$line" =~ ; ]]; then
-                inside_update=0
-                if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
-                  echo "UPDATE statement without WHERE at or near line $line_number in $file"
-                  echo "  -> $update_statement"
-                  found=1
-                fi
-                update_statement=""
+            update_statement="$update_statement $line"
+            if echo "$line" | grep -q ";"; then
+              inside_update=0
+              if ! echo "$update_statement" | grep -Eiq '\bwhere\b'; then
+                echo "UPDATE statement without WHERE at or near line $line_number in $file"
+                echo "  -> $update_statement"
+                found=1
               fi
+              update_statement=""
             fi
+          fi
           done < "$file"  
         done
 
