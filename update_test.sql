@@ -7,8 +7,7 @@ CREATE TABLE feedback (
 
 INSERT INTO products (product_name, price, stock_quantity) VALUES ('Bluetooth Speaker', 49.99, 150);
 
-UPDATE customers 
-SET email = 'newemail@example.com' 
+UPDATE customers SET email = 'newemail@example.com' 
 WHERE customer_id = 42;
 
 SELECT first_name, last_name FROM employees WHERE department = 'Sales';
