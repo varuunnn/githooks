@@ -57,6 +57,7 @@ jobs:
               # Start of UPDATE block
               if [[ "$trimmed_line" == update* ]]; then
                 if [[ $inside_update -eq 1 ]]; then
+                  # Trim leading/trailing spaces and normalize case before checking
                   normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
                   if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
                     echo "⚠️ UPDATE without WHERE before line $line_number in $file"
@@ -76,6 +77,7 @@ jobs:
 
                 # End of statement with semicolon
                 if echo "$line" | grep -q ";"; then
+                  # Normalize the full update statement before checking
                   normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
                   if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
                     echo "⚠️ UPDATE without WHERE near line $line_number in $file"
@@ -90,6 +92,7 @@ jobs:
 
             # Check if EOF reached during UPDATE
             if [[ $inside_update -eq 1 ]]; then
+              # Normalize the full update statement before checking
               normalized_update=$(echo "$update_statement" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
               if ! echo "$normalized_update" | grep -Eq '\bwhere\b'; then
                 echo "⚠️ UPDATE without WHERE at line $update_start_line in $file"
