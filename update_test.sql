@@ -1,1 +1,1 @@
-UPDATE users SET status = 'inactive'
+UPDATE users SET status = 'inactive';
